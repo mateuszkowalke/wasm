@@ -142,34 +142,34 @@ impl Universe {
 
 #[wasm_bindgen]
 impl Universe {
-    pub fn tick(&mut self) {
+    pub fn tick(&mut self) -> Box<[u32]> {
+        let _timer = Timer::new("universe::tick()");
+        let mut deltas: Vec<u32> = {
+            let _timer = Timer::new("deltas alloc");
+            Vec::new()
+        };
         self.temp_cells.set_range(.., false);
         for row in 0..self.height {
             for col in 0..self.width {
                 let idx = self.get_index(row, col);
                 let cell = self.cells[idx];
                 let live_neighbors = self.live_neighbor_count(row, col);
-                // log!(
-                //     "cell[{}, {}] is initially {:?} and has {} live neighbors",
-                //     row,
-                //     col,
-                //     cell,
-                //     live_neighbors
-                // );
-                self.temp_cells.set(
-                    idx,
-                    match (cell, live_neighbors) {
-                        (true, x) if x < 2 => false,
-                        (true, 2) | (true, 3) => true,
-                        (true, x) if x > 3 => false,
-                        (false, 3) => true,
-                        (otherwise, _) => otherwise,
-                    },
-                );
-                // log!("    it becomes {:?}", next[idx]);
+                let next_cell = match (cell, live_neighbors) {
+                    (true, x) if x < 2 => false,
+                    (true, 2) | (true, 3) => true,
+                    (true, x) if x > 3 => false,
+                    (false, 3) => true,
+                    (otherwise, _) => otherwise,
+                };
+                if next_cell != cell {
+                    deltas.push(row);
+                    deltas.push(col);
+                }
+                self.temp_cells.set(idx, next_cell);
             }
         }
         self.cells.clone_from(&self.temp_cells);
+        deltas.into_boxed_slice()
     }
 
     pub fn new() -> Universe {
@@ -186,7 +186,7 @@ impl Universe {
             width,
             height,
             cells,
-            temp_cells
+            temp_cells,
         }
     }
 
@@ -212,10 +212,14 @@ impl Universe {
         self.cells = cells;
     }
 
-    pub fn toggle_cell(&mut self, row: u32, col: u32) {
+    pub fn toggle_cell(&mut self, row: u32, col: u32) -> Box<[u32]> {
+        let mut deltas: Vec<u32> = Vec::new();
         let idx = self.get_index(row, col);
         let cell_state = self.cells[idx];
         self.cells.set(idx, !cell_state);
+        deltas.push(row);
+        deltas.push(col);
+        deltas.into_boxed_slice()
     }
 
     pub fn reset_clear(&mut self) {
@@ -232,7 +236,8 @@ impl Universe {
         }
     }
 
-    pub fn insert_glider_at_pos(&mut self, row: u32, col: u32) {
+    pub fn insert_glider_at_pos(&mut self, row: u32, col: u32) -> Box<[u32]> {
+        let mut deltas: Vec<u32> = Vec::new();
         for d_row in [self.height - 1, 0, 1].iter().cloned() {
             for d_col in [self.width - 1, 0, 1].iter().cloned() {
                 let cell_row = (d_row + row) % self.height;
@@ -246,12 +251,16 @@ impl Universe {
                 } else {
                     false
                 };
+                deltas.push(cell_row);
+                deltas.push(cell_col);
                 self.cells.set(idx, is_alive);
             }
         }
+        deltas.into_boxed_slice()
     }
 
-    pub fn insert_pulsar_at_pos(&mut self, row: u32, col: u32) {
+    pub fn insert_pulsar_at_pos(&mut self, row: u32, col: u32) -> Box<[u32]> {
+        let mut deltas: Vec<u32> = Vec::new();
         let hor_row = [
             false, false, true, true, true, false, false, false, true, true, true, false, false,
         ];
@@ -266,11 +275,14 @@ impl Universe {
         for (d_row, row_cells) in rows.iter().cloned().enumerate() {
             let cell_row =
                 (((d_row as u32 + self.height - 6) % self.height) as u32 + row) % self.height;
-            let row_idx = self.get_row_index(cell_row) + col as usize;
+            let block_idx = self.get_row_index(cell_row) + col as usize;
             for idx in 0..13 {
-                self.cells.set(row_idx + idx - 6, row_cells[idx])
+                self.cells.set(block_idx + idx - 6, row_cells[idx]);
+                deltas.push(cell_row);
+                deltas.push((self.width + (block_idx + idx) as u32 - 6) % self.width);
             }
         }
+        deltas.into_boxed_slice()
     }
 
     pub fn render(&self) -> String {
