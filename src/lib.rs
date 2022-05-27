@@ -143,9 +143,7 @@ impl Universe {
 #[wasm_bindgen]
 impl Universe {
     pub fn tick(&mut self) -> Box<[u32]> {
-        let _timer = Timer::new("universe::tick()");
         let mut deltas: Vec<u32> = {
-            let _timer = Timer::new("deltas alloc");
             Vec::new()
         };
         self.temp_cells.set_range(.., false);
@@ -174,8 +172,8 @@ impl Universe {
 
     pub fn new() -> Universe {
         utils::set_panic_hook();
-        let width = 256;
-        let height = 256;
+        let width = 64;
+        let height = 64;
         let size = (width * height) as usize;
         let mut cells = FixedBitSet::with_capacity(size);
         let temp_cells = FixedBitSet::with_capacity(size);
